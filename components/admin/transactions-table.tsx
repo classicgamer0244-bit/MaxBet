@@ -43,6 +43,26 @@ export function TransactionsTable({
     table.refresh();
   }
 
+  async function refundAll() {
+    if (!window.confirm("Refund every pending withdrawal? This credits each one back to the user's balance and cannot be undone.")) {
+      return;
+    }
+    const res = await fetch("/api/superadmin/withdrawals/refund-all", { method: "POST" });
+    const data = await readJson(res);
+    if (!res.ok) {
+      toast.error(data?.error ?? "Couldn't refund pending withdrawals.");
+      return;
+    }
+    if (data.total === 0) {
+      toast.info("No pending withdrawals to refund.");
+    } else if (data.failed > 0) {
+      toast.warning(`Refunded ${data.refunded} of ${data.total} (${data.failed} failed — check logs).`);
+    } else {
+      toast.success(`Refunded ${data.refunded} withdrawal${data.refunded === 1 ? "" : "s"} — ${money(data.refundedAmount)} total.`);
+    }
+    table.refresh();
+  }
+
   const columns: Column<Transaction>[] = [
     { header: "Date", cell: (t) => <span className="text-muted-foreground">{shortDateTime(t.createdAt)}</span> },
     { header: "User", cell: (t) => <span className="font-medium">{t.userLabel ?? t.accountId}</span> },
@@ -125,7 +145,16 @@ export function TransactionsTable({
       empty={empty}
       searchPlaceholder="Search by phone or reference…"
       statusOptions={STATUS_OPTIONS}
-      toolbarEnd={<DateRangeFilter from={table.from} to={table.to} onChange={(from, to) => { table.setFrom(from); table.setTo(to); }} />}
+      toolbarEnd={
+        <div className="flex items-center gap-2">
+          {refundable && (
+            <Button size="sm" variant="outline" onClick={refundAll}>
+              Refund all pending
+            </Button>
+          )}
+          <DateRangeFilter from={table.from} to={table.to} onChange={(from, to) => { table.setFrom(from); table.setTo(to); }} />
+        </div>
+      }
     />
   );
 }
