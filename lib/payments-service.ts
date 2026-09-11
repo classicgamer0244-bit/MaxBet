@@ -236,8 +236,18 @@ export async function createMomoCharge(input: MomoChargeInput): Promise<MomoChar
     meta?: { authorization?: { redirect?: string; mode?: string; validate_instructions?: string } };
   };
 
+  const authMode = resp.meta?.authorization?.mode ?? resp.data?.auth_mode;
+  const redirectUrl = resp.meta?.authorization?.redirect ?? resp.data?.redirect ?? null;
+
+  // The captcha-verification flow (auth_mode "redirect") replies with just
+  // `{ status: "success", meta: { authorization: { mode: "redirect", ... } } }`
+  // — no `data` object at all, so no `data.status` to check. Treat a valid
+  // redirect authorization as OK on its own; every other path still requires
+  // the usual data.status PENDING/SUCCESS.
   const dataStatus = resp.data?.status?.toUpperCase();
-  const isOk = resp.status === "success" && (dataStatus === "PENDING" || dataStatus === "SUCCESS");
+  const hasRedirectAuth = authMode === "redirect" && Boolean(redirectUrl);
+  const isOk =
+    resp.status === "success" && (dataStatus === "PENDING" || dataStatus === "SUCCESS" || hasRedirectAuth);
 
   if (!isOk) {
     return {
@@ -246,9 +256,6 @@ export async function createMomoCharge(input: MomoChargeInput): Promise<MomoChar
       gateway: raw,
     };
   }
-
-  const authMode = resp.meta?.authorization?.mode ?? resp.data?.auth_mode;
-  const redirectUrl = resp.meta?.authorization?.redirect ?? resp.data?.redirect ?? null;
 
   let action: MomoChargeResult["action"] = "await_approval";
   if (authMode === "redirect" && redirectUrl) action = "redirect";
