@@ -223,6 +223,31 @@ export function MerchantsManager() {
     setDetail((d) => (d ? { ...d, admin: data.admin } : d));
   }
 
+  async function settleAllEarnings() {
+    if (
+      !window.confirm(
+        "Settle every merchant's unpaid earnings? This records a payout for each one and resets their earnings to zero — make sure you've actually paid them first."
+      )
+    ) {
+      return;
+    }
+    const res = await fetch("/api/superadmin/admins/settle-all-earnings", { method: "POST" });
+    const data = await readJson(res);
+    if (!res.ok) {
+      toast.error(data?.error ?? "Couldn't settle merchant earnings.");
+      return;
+    }
+    if (data.total === 0) {
+      toast.info("No merchants have unpaid earnings.");
+    } else if (data.failed > 0) {
+      toast.warning(`Settled ${data.settled} of ${data.total} (${data.failed} failed — check logs).`);
+    } else {
+      toast.success(`Settled ${data.settled} merchant${data.settled === 1 ? "" : "s"} — ${money(data.settledAmount)} total.`);
+    }
+    table.refresh();
+    if (selectedId) refreshDetail(selectedId);
+  }
+
   const columns: Column<AdminAccount>[] = [
     {
       header: "Merchant",
@@ -248,7 +273,14 @@ export function MerchantsManager() {
         onRowClick={(a) => setSelectedId(a.id)}
         searchPlaceholder="Search by name, email or phone…"
         statusOptions={STATUS_OPTIONS}
-        toolbarEnd={<CreateMerchantDialog onCreated={table.refresh} />}
+        toolbarEnd={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={settleAllEarnings}>
+              Settle all earnings
+            </Button>
+            <CreateMerchantDialog onCreated={table.refresh} />
+          </div>
+        }
       />
 
       <Sheet open={selectedId !== null} onOpenChange={closeSheet}>
