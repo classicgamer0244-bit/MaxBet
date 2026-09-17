@@ -16,7 +16,7 @@ export function toArkeselNumber(localPhone: string, countryCode: string): string
 }
 
 export async function sendSms(internationalPhone: string, message: string): Promise<void> {
-  await fetch(`${BASE_URL}/v2/sms/send`, {
+  const res = await fetch(`${BASE_URL}/v2/sms/send`, {
     method: "POST",
     headers: { "api-key": requireApiKey(), "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -25,4 +25,8 @@ export async function sendSms(internationalPhone: string, message: string): Prom
       recipients: [internationalPhone],
     }),
   });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Arkesel send failed (${res.status}): ${body}`);
+  }
 }
