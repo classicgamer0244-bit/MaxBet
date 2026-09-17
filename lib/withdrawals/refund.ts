@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { incrementBalance, registerWithdrawalRefund } from "@/lib/accounts/balance";
-import { toE164, sendSms } from "@/lib/sms";
+import { toArkeselNumber, sendSms } from "@/lib/arkesel";
 import { fromMinor } from "@/lib/money";
 import type { Transaction } from "@prisma/client";
 
@@ -59,7 +59,7 @@ export async function refundWithdrawal(transactionId: string, performedByAdminId
   // Send refund notification SMS — best-effort, must never break the refund.
   try {
     if (account?.phone) {
-      const intlPhone = toE164(account.phone, (account as { countryCode?: string }).countryCode ?? "233");
+      const intlPhone = toArkeselNumber(account.phone, (account as { countryCode?: string }).countryCode ?? "233");
       const amount = fromMinor(txn.amountMinor).toFixed(2);
       await sendSms(intlPhone, `MaxBet: Your withdrawal of GHS ${amount} has been refunded. The amount has been returned to your balance.`);
     }

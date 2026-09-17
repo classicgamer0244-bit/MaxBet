@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { ADMIN_COMMISSION_SHARE } from "@/lib/constants";
 import { incrementBalance, recordSuccessfulDeposit } from "@/lib/accounts/balance";
-import { toE164, sendSms } from "@/lib/sms";
+import { toArkeselNumber, sendSms } from "@/lib/arkesel";
 import { fromMinor } from "@/lib/money";
 import type { Prisma } from "@prisma/client";
 
@@ -70,7 +70,7 @@ export async function creditSuccessfulDeposit(reference: string, gatewayRaw?: un
       ? await db.user.findUnique({ where: { id: txn.accountId }, select: { phone: true, countryCode: true } })
       : await db.adminAccount.findUnique({ where: { id: txn.accountId }, select: { phone: true } });
     if (user?.phone) {
-      const intlPhone = toE164(user.phone, (user as { countryCode?: string }).countryCode ?? "233");
+      const intlPhone = toArkeselNumber(user.phone, (user as { countryCode?: string }).countryCode ?? "233");
       const amount = fromMinor(txn.amountMinor).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       await sendSms(intlPhone, `MaxBet: Your deposit of GHS ${amount} was successful. Your balance has been updated. Thank you!`);
     }
