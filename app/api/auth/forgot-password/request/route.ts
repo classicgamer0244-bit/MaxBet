@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { sendSms, toArkeselNumber } from "@/lib/arkesel";
+import { sendSms, toE164 } from "@/lib/sms";
 import { phoneVariants } from "@/lib/auth/phone";
 
 const bodySchema = z.object({ phone: z.string().trim().min(6).max(20) });
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   });
 
   try {
-    const intlPhone = toArkeselNumber(user.phone, user.countryCode);
+    const intlPhone = toE164(user.phone, user.countryCode);
     await sendSms(intlPhone, `Your MaxBet password reset code is ${code}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`);
   } catch (err) {
     console.error("Failed to send password-reset SMS:", err);

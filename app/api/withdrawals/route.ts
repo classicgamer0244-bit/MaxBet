@@ -8,7 +8,7 @@ import { MIN_WITHDRAWAL_AMOUNT } from "@/lib/constants";
 import { serializeTransaction } from "@/lib/transactions/serialize";
 import { decrementBalanceIfSufficient, toAccountKind } from "@/lib/accounts/balance";
 import { checkWithdrawalEligibility } from "@/lib/withdrawal-eligibility";
-import { toArkeselNumber, sendSms } from "@/lib/arkesel";
+import { toE164, sendSms } from "@/lib/sms";
 
 // Bank transfer is "coming soon" (disabled in the UI) — only Mobile Money
 // withdrawals are accepted server-side too, not just hidden client-side.
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     const user = account.kind === "user"
       ? await db.user.findUnique({ where: { id: account.id }, select: { phone: true, countryCode: true } })
       : null;
-    const intlPhone = toArkeselNumber(account.phone, user?.countryCode ?? "233");
+    const intlPhone = toE164(account.phone, user?.countryCode ?? "233");
     const amount = fromMinor(amountMinor).toLocaleString("en-GH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     await sendSms(intlPhone, `MaxBet: Your withdrawal request of GHS ${amount} to ${parsed.data.phone} (${parsed.data.network}) has been received and is being processed.`);
   } catch { /* SMS failure must never block the response */ }
