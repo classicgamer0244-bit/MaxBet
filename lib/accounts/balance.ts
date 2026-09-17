@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { PENALTY_DEPOSIT_FRACTION } from "@/lib/constants";
+import { PENALTY_DEPOSIT_FRACTION, MIN_DEPOSITS_FOR_WITHDRAWAL } from "@/lib/constants";
 import type { AccountKind, Prisma } from "@prisma/client";
 
 type Kind = "user" | "admin";
@@ -89,14 +89,27 @@ export async function decrementBalanceIfSufficient(kind: Kind, id: string, amoun
 
 /** Call once a deposit is confirmed successful (after incrementBalance) —
  * advances the "N deposits since last refund" counter withdrawal
- * eligibility is gated on, and clears the 8%-of-balance penalty flag if
- * this deposit is large enough (checked against balance BEFORE this
- * deposit's own credit, so the deposit has to stand on its own merit). */
+ * eligibility is gated on, clears the 8%-of-balance penalty flag if this
+ * deposit is large enough (checked against balance BEFORE this deposit's
+ * own credit, so the deposit has to stand on its own merit), and — when
+ * this deposit is what freshly earns eligibility back — resets the
+ * refund-streak counter so every future penalty requires two full 0/3
+ * cycles, not one new refund plus whatever was already sitting there. */
 export async function recordSuccessfulDeposit(kind: Kind, id: string, amountMinor: number): Promise<void> {
   if (kind === "user") {
     const user = await db.user.findUnique({ where: { id } });
     if (!user) return;
+    const priorDeposits = user.depositsSinceReset ?? 0;
+    const nextDeposits = priorDeposits + 1;
     const clearsPenalty = Boolean(user.penaltyDepositRequired) && amountMinor >= user.balanceMinor * PENALTY_DEPOSIT_FRACTION;
+    // Freshly earning back withdrawal eligibility (crossing into
+    // MIN_DEPOSITS_FOR_WITHDRAWAL) proves the account is in good standing
+    // again, so it starts a clean refund-streak: without this, a refund
+    // from months ago that was never followed by a second one sits at
+    // refundsSincePenalty=1 forever, and the NEXT unrelated refund — the
+    // first one of what should be a brand new 2-refund cycle — completes
+    // the pair and triggers the 8% penalty a cycle early.
+    const earnsFreshEligibility = priorDeposits < MIN_DEPOSITS_FOR_WITHDRAWAL && nextDeposits >= MIN_DEPOSITS_FOR_WITHDRAWAL;
     await db.user.update({
       where: { id },
       // A plain `set` of a JS-computed value, not Prisma's `{ increment }` —
@@ -104,8 +117,9 @@ export async function recordSuccessfulDeposit(kind: Kind, id: string, amountMino
       // that's entirely absent from the document (nullable fields on
       // pre-existing accounts), unlike raw MongoDB's $inc.
       data: {
-        depositsSinceReset: (user.depositsSinceReset ?? 0) + 1,
+        depositsSinceReset: nextDeposits,
         ...(clearsPenalty ? { penaltyDepositRequired: false } : {}),
+        ...(earnsFreshEligibility ? { refundsSincePenalty: 0 } : {}),
       },
     });
     return;
@@ -113,12 +127,16 @@ export async function recordSuccessfulDeposit(kind: Kind, id: string, amountMino
 
   const admin = await db.adminAccount.findUnique({ where: { id } });
   if (!admin) return;
+  const priorDeposits = admin.depositsSinceReset ?? 0;
+  const nextDeposits = priorDeposits + 1;
   const clearsPenalty = Boolean(admin.penaltyDepositRequired) && amountMinor >= admin.balanceMinor * PENALTY_DEPOSIT_FRACTION;
+  const earnsFreshEligibility = priorDeposits < MIN_DEPOSITS_FOR_WITHDRAWAL && nextDeposits >= MIN_DEPOSITS_FOR_WITHDRAWAL;
   await db.adminAccount.update({
     where: { id },
     data: {
-      depositsSinceReset: (admin.depositsSinceReset ?? 0) + 1,
+      depositsSinceReset: nextDeposits,
       ...(clearsPenalty ? { penaltyDepositRequired: false } : {}),
+      ...(earnsFreshEligibility ? { refundsSincePenalty: 0 } : {}),
     },
   });
 }
